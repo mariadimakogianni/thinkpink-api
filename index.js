@@ -40,7 +40,6 @@ app.post('/createEvent', async (req, res) => {
 
     // Assuming you have a request body containing the event data
     const eventData = req.body;
-   // console.log(req.body);
 
     console.log("Inserted event: "+JSON.stringify(eventData)) 
     // Insert the eventData into the 'events' collection
@@ -54,10 +53,73 @@ app.post('/createEvent', async (req, res) => {
     console.error(error);
     res.status(500).json({ message: 'Internal server error' });
   } finally {
-    // Make sure to close the database connection
     await client.close();
   }
 });
+
+app.patch('/editEvent/:event_id', async (req, res) => {
+  try {
+    const event_id = req.params.event_id;
+
+    await client.connect();
+    const db = client.db('thinkpink');
+    const collection = db.collection('events');
+
+    console.log(`Updating event ${event_id} with done=true`);
+    const result = await collection.updateOne(
+    { _id: new ObjectId(event_id) },  
+   // { $set: { done: true } } // add the new object
+
+  )} catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Internal server error' });
+  } finally {
+    await client.close();
+  }
+});
+
+app.put('/doneEvent/:event_id', async (req, res) => {
+  try {
+    const event_id = req.params.event_id;
+
+    await client.connect();
+    const db = client.db('thinkpink');
+    const collection = db.collection('events');
+
+    console.log(`Updating event ${event_id} with done=true`);
+    const result = await collection.updateOne(
+    { _id: new ObjectId(event_id) },  
+    { $set: { done: true } }            
+
+); 
+    res.status(200).send('OK');
+   // console.log(req.body);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Internal server error' });
+  } finally {
+    await client.close();
+  }
+});
+
+app.delete('/deleteEvent/:event_id', async (req, res) => {
+  try {
+    const event_id = req.params.event_id;
+    await client.connect();
+    const db = client.db('thinkpink');
+    const collection = db.collection('events');
+
+    const result = await collection.deleteOne({ _id: new ObjectId(event_id) });
+    res.status(200).send('OK');
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Internal server error');
+  } finally {
+    await client.close();
+  }
+});
+
+
 
 
 const API_PORT = process.env.API_PORT || 3000;
