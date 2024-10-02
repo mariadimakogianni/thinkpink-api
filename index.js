@@ -60,17 +60,26 @@ app.post('/createEvent', async (req, res) => {
 app.patch('/editEvent/:event_id', async (req, res) => {
   try {
     const event_id = req.params.event_id;
+    const updateData = req.body;
+
+    // Remove _id from updateData
+    if ('_id' in updateData) {
+      delete updateData._id;
+    }
 
     await client.connect();
     const db = client.db('thinkpink');
     const collection = db.collection('events');
 
-    console.log(`Updating event ${event_id} with done=true`);
+    console.log(`Updating event ${event_id} with data:`, updateData);
     const result = await collection.updateOne(
-    { _id: new ObjectId(event_id) },  
-   // { $set: { done: true } } // add the new object
+      { _id: new ObjectId(event_id) },
+      { $set: updateData }
+    );
 
-  )} catch (error) {
+  res.status(200).send('OK');
+   console.log(req.body);
+  } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Internal server error' });
   } finally {
