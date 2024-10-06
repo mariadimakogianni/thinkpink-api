@@ -135,6 +135,10 @@ app.get('/getLists', async (req, res) => {
     const collection = db.collection('lists');
 
     const lists = await collection.find({}).toArray();
+     lists.forEach(list => {
+      console.log('List:', list);
+      console.log('Items:', list.items);  // Log the items array explicitly
+    });
     res.json(lists);
   } catch (error) {
     console.error(error);
@@ -181,6 +185,7 @@ app.delete('/deleteList/:list_id', async (req, res) => {
     const result = await collection.deleteOne({ _id: new ObjectId(list_id) });
 
     if (result.deletedCount === 1) {
+      console.log("List deleted successfully", list_id);
       res.status(200).json({ message: 'List deleted successfully' });
     } else {
       res.status(404).json({ message: 'List not found' });
@@ -209,9 +214,21 @@ app.post('/addItemToList/:list_id', async (req, res) => {
       newItem._id = new ObjectId(); 
     }
 
+    const list = await collection.findOne({ _id: new ObjectId(list_id) });
+
+    if (!list) {
+      res.status(404).json({ message: 'List not found' });
+      return;
+    }
+    if (!Array.isArray(list.items)) {
+          list.items = [];
+        }
+
+    list.items.push(newItem);
+
     const result = await collection.updateOne(
       { _id: new ObjectId(list_id) },
-      { $push: { items: newItem } }
+      { $push: { items: list.items } }
     );
   
     if (result.modifiedCount === 1) {
@@ -242,6 +259,7 @@ app.delete('/deleteItemFromList/:list_id/:item_index', async (req, res) => {
     if (list) {
       if (item_index >= 0 && item_index < list.items.length) {
         list.items.splice(item_index, 1);
+
         const result = await collection.updateOne(
           { _id: new ObjectId(list_id) },
           { $set: { items: list.items } }
