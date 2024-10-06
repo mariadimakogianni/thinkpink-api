@@ -128,8 +128,139 @@ app.delete('/deleteEvent/:event_id', async (req, res) => {
   }
 });
 
+app.get('/getLists', async (req, res) => {
+  try {
+    await client.connect();
+    const db = client.db('thinkpink');
+    const collection = db.collection('lists');
+
+    const lists = await collection.find({}).toArray();
+    res.json(lists);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Internal server error' });
+  } finally {
+    await client.close();
+  }
+});
 
 
+
+app.post('/createList', async (req, res) => {
+  try {
+    await client.connect();
+    const db = client.db('thinkpink');
+    const collection = db.collection('lists');
+
+    const listData = req.body;
+
+    console.log("Inserted list: " + JSON.stringify(listData));
+
+    const result = await collection.insertOne(listData);
+
+    if (result.insertedId) {
+      res.status(201).json({ message: 'List created successfully', listId: result.insertedId });
+    } else {
+      res.status(500).json({ message: 'Failed to create list' });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Internal server error' });
+  } finally {
+    await client.close();
+  }
+});
+
+app.delete('/deleteList/:list_id', async (req, res) => {
+  try {
+    await client.connect();
+    const db = client.db('thinkpink');
+    const collection = db.collection('lists');
+    const list_id = req.params.list_id;
+
+    const result = await collection.deleteOne({ _id: new ObjectId(list_id) });
+
+    if (result.deletedCount === 1) {
+      res.status(200).json({ message: 'List deleted successfully' });
+    } else {
+      res.status(404).json({ message: 'List not found' });
+    }
+  } catch (error) {
+    console.error('Error in deleteList:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+  finally {
+    await client.close();
+  }
+});
+
+app.post('/addItemToList/:list_id', async (req, res) => {
+  try {
+    await client.connect();
+    const db = client.db('thinkpink');
+    const collection = db.collection('lists');
+    const list_id = req.params.list_id;
+    const newItem = req.body;
+
+    console.log("Adding item to list:", list_id);
+    console.log("New item:", newItem);
+
+     if (!newItem._id) {
+      newItem._id = new ObjectId(); 
+    }
+
+    const result = await collection.updateOne(
+      { _id: new ObjectId(list_id) },
+      { $push: { items: newItem } }
+    );
+  
+    if (result.modifiedCount === 1) {
+      console.log("Update result:", result);
+      res.status(200).json({ message: 'Item added successfully api', newItem });
+    } else {
+      res.status(404).json({ message: 'List not found' });
+    }
+  } catch (error) {
+    console.error('Error in addItemToList:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+  finally {
+    await client.close();
+  }
+});
+
+app.delete('/deleteItemFromList/:list_id/:item_index', async (req, res) => {
+  try {
+    await client.connect();
+    const db = client.db('thinkpink');
+    const collection = db.collection('lists');
+    const list_id = req.params.list_id;
+    const item_index = parseInt(req.params.item_index);
+
+    const list = await collection.findOne({ _id: new ObjectId(list_id) });
+
+    if (list) {
+      if (item_index >= 0 && item_index < list.items.length) {
+        list.items.splice(item_index, 1);
+        const result = await collection.updateOne(
+          { _id: new ObjectId(list_id) },
+          { $set: { items: list.items } }
+        );
+        res.status(200).json({ message: 'Item deleted successfully' });
+      } else {
+        res.status(400).json({ message: 'Invalid item index' });
+      }
+    } else {
+      res.status(404).json({ message: 'List not found' });
+    }
+  } catch (error) {
+    console.error('Error in deleteItemFromList:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+  finally {
+    await client.close();
+  }
+});
 
 const API_PORT = process.env.API_PORT || 3000;
 app.listen(API_PORT, () => console.log(`Express API listening on port ${API_PORT}`));
