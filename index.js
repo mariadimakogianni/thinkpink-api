@@ -3,43 +3,134 @@ const app = express();
 const port = 3000;
 const cors = require('cors'); // Import the 'cors' middleware
 const bodyParser = require('body-parser');
-
 const { ObjectId } = require('mongodb'); // Import the ObjectId constructor
 
 
 //define url of mongo
 const dbUrl = 'mongodb://localhost:27017/thinkpink';
-//
+
+
 //import mongo client
 const { MongoClient } = require('mongodb');
 
+
+// import keycloack
+const $thinkpink = {};
+const Keycloak = require('keycloak-connect');
+const axios = require('axios');
+
+
+//initialize keycloack
+const keycloak = new Keycloak({ configFile: 'keycloak.json' });
+keycloak.logger = console;
+
+
 //initialize the connection
 const client = new MongoClient('mongodb://localhost:27017/thinkpink');
-//
 
-app.use(cors({ origin: 'http://localhost:8080' })); // Allow requests from this origin
+//Token verification
+async function verifyToken(token) {
+  try {
+    console.log(token);
+    const result = await keycloak.grantManager.validateAccessToken(token);
+    console.log(result);
+    return (result===false) ? 1 : 0; // Token is valid (0) or invalid or expired (1)
+  } catch (error) {
+    console.log(error);
+    console.error('Token verification failed:', error);
+    return -1; // Error during token verification
+  }
+}
+
+async function getUserId(token) {
+  try {
+    const introspectionUrl = 'http://localhost:8081/realms/ThinkPink/protocol/openid-connect/token/introspect';
+    const introspectionConfig = {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    };
+
+    const introspectionData = new URLSearchParams();
+    introspectionData.append('token', token);
+    introspectionData.append('client_id', 'thesis-thinkpink');
+    introspectionData.append('grant_type', 'urn:ietf:params:oauth:grant-type:uma-ticket');
+
+    const response = await axios.post(introspectionUrl, introspectionData.toString(), introspectionConfig);
+
+    if (response.data.active) {
+      return response.data.sub; //sub contains user id
+    } else {
+      throw new Error('Invalid token');
+    }
+  } catch (error) {
+    console.error('Failed to retrieve client_id:', error);
+    return -1;
+  }
+}
+
+async function tokenVerification(req, res, next) {
+
+  const token = req.headers.authorization?.split(' ')[1];
+
+  try {
+    const tokenValid = await verifyToken(token);
+    if (tokenValid !== 0) {
+      res.status(401).json({ error: 'Token invalid or expired' });
+      return;
+    }
+
+    const userId = await getUserId(token);
+    if (userId === -1) {
+      res.status(401).json({ error: 'Token invalid or expired' });
+      return;
+    }
+
+    req.userId = userId;
+    // if (allowedClients && !isClientIdInArray(clientId, allowedClients)) {
+    //   res.status(401).json({ error: 'Permission Denied' });
+    //   return;
+    // }
+
+    // All checks passed, proceed to the next middleware or route handler
+    next();
+  } catch (error) {
+    console.error('Token verification failed:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+}
+
+$thinkpink.verifyToken = tokenVerification;
+
+
+
+// Allow requests from this origin
+app.use(cors({ origin: 'http://localhost:8080' })); 
 app.use(bodyParser.json());
 
 
-app.get('/getEvents', async (req, res) => {
+//API
+app.get('/getEvents', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thesis-thinkpink']), async (req, res) => {
 	await client.connect();
 	const db = client.db('thinkpink');
 	const collection = db.collection('events');
 
 	//const objectId = new ObjectId("65395ca09544dacb9c7372ab");
-	var result = await collection.find({}).toArray();
+	var result = await collection.find({ userId: req.userId }).toArray();
 
     res.json(result);
 });
 
-app.post('/createEvent', async (req, res) => {
+app.post('/createEvent', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thesis-thinkpink']), async (req, res) => {
   try {
     await client.connect();
     const db = client.db('thinkpink');
     const collection = db.collection('events');
 
     // Assuming you have a request body containing the event data
-    const eventData = req.body;
+    //const eventData = req.body;
+    const eventData = {
+        ...req.body,
+        userId: req.userId
+      };
 
     console.log("Inserted event: "+JSON.stringify(eventData)) 
     // Insert the eventData into the 'events' collection
@@ -57,7 +148,7 @@ app.post('/createEvent', async (req, res) => {
   }
 });
 
-app.patch('/editEvent/:event_id', async (req, res) => {
+app.patch('/editEvent/:event_id', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thesis-thinkpink']), async (req, res) => {
   try {
     const event_id = req.params.event_id;
     const updateData = req.body;
@@ -87,7 +178,7 @@ app.patch('/editEvent/:event_id', async (req, res) => {
   }
 });
 
-app.put('/doneEvent/:event_id', async (req, res) => {
+app.put('/doneEvent/:event_id', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thesis-thinkpink']), async (req, res) => {
   try {
     const event_id = req.params.event_id;
 
@@ -111,7 +202,7 @@ app.put('/doneEvent/:event_id', async (req, res) => {
   }
 });
 
-app.delete('/deleteEvent/:event_id', async (req, res) => {
+app.delete('/deleteEvent/:event_id', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thesis-thinkpink']), async (req, res) => {
   try {
     const event_id = req.params.event_id;
     await client.connect();
@@ -128,14 +219,14 @@ app.delete('/deleteEvent/:event_id', async (req, res) => {
   }
 });
 
-app.get('/getLists', async (req, res) => {
+app.get('/getLists', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thesis-thinkpink']), async (req, res) => {
   try {
     await client.connect();
     const db = client.db('thinkpink');
     const collection = db.collection('lists');
 
     const lists = await collection.find({}).toArray();
-     lists.forEach(list => {
+    lists.forEach(list => {
       console.log('List:', list);
       console.log('Items:', list.items);  // Log the items array explicitly
     });
@@ -150,7 +241,7 @@ app.get('/getLists', async (req, res) => {
 
 
 
-app.post('/createList', async (req, res) => {
+app.post('/createList', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thesis-thinkpink']), async (req, res) => {
   try {
     await client.connect();
     const db = client.db('thinkpink');
@@ -175,7 +266,7 @@ app.post('/createList', async (req, res) => {
   }
 });
 
-app.delete('/deleteList/:list_id', async (req, res) => {
+app.delete('/deleteList/:list_id', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thesis-thinkpink']), async (req, res) => {
   try {
     await client.connect();
     const db = client.db('thinkpink');
@@ -199,7 +290,7 @@ app.delete('/deleteList/:list_id', async (req, res) => {
   }
 });
 
-app.post('/addItemToList/:list_id', async (req, res) => {
+app.post('/addItemToList/:list_id', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thesis-thinkpink']), async (req, res) => {
   try {
     await client.connect();
     const db = client.db('thinkpink');
@@ -246,7 +337,7 @@ app.post('/addItemToList/:list_id', async (req, res) => {
   }
 });
 
-app.delete('/deleteItemFromList/:list_id/:item_index', async (req, res) => {
+app.delete('/deleteItemFromList/:list_id/:item_index', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thesis-thinkpink']), async (req, res) => {
   try {
     await client.connect();
     const db = client.db('thinkpink');
