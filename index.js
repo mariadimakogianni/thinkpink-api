@@ -1,10 +1,11 @@
 const express = require('express');
 const app = express();
 const port = 3000;
-const cors = require('cors'); // Import the 'cors' middleware
+const cors = require('cors'); 
 const bodyParser = require('body-parser');
 const { ObjectId } = require('mongodb'); // Import the ObjectId constructor
-
+const fs = require('fs');
+const path = require('path');
 
 //define url of mongo
 const dbUrl = 'mongodb://localhost:27017/thinkpink';
@@ -19,9 +20,22 @@ const $thinkpink = {};
 const Keycloak = require('keycloak-connect');
 const axios = require('axios');
 
+var keycloakConf={
+  realm: "ThinkPink",
+  "auth-server-url": "http://localhost:8081",
+  "ssl-required": "external",
+  resource: "thinkpink-api",
+  credentials: {
+    secret: "" //injected from 'keycloak-secret' file
+  },
+  "bearer-only": true,
+  "confidential-port": 0
+};
+
+keycloakConf.credentials.secret=fs.readFileSync(path.join(__dirname, 'keycloak-secret'), 'utf-8').trim();
 
 //initialize keycloack
-const keycloak = new Keycloak({ configFile: 'keycloak.json' });
+const keycloak = new Keycloak({},keycloakConf);
 keycloak.logger = console;
 
 
@@ -31,65 +45,69 @@ const client = new MongoClient('mongodb://localhost:27017/thinkpink');
 //Token verification
 async function verifyToken(token) {
   try {
-    console.log(token);
+    // console.log(token);
     const result = await keycloak.grantManager.validateAccessToken(token);
+
     console.log(result);
     return (result===false) ? 1 : 0; // Token is valid (0) or invalid or expired (1)
   } catch (error) {
-    console.log(error);
+    // console.log(error);
     console.error('Token verification failed:', error);
-    return -1; // Error during token verification
+    return -1; 
   }
 }
 
-async function getUserId(token) {
+async function resolveUser(token) {
   try {
-    const introspectionUrl = 'http://localhost:8081/realms/ThinkPink/protocol/openid-connect/token/introspect';
-    const introspectionConfig = {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    const userInfoUrl = 'http://localhost:8081/realms/ThinkPink/protocol/openid-connect/userinfo';
+    const userInfoConfig = {
+      headers: { 
+        'Authorization': `Bearer ${token}`, 
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
     };
 
-    const introspectionData = new URLSearchParams();
-    introspectionData.append('token', token);
-    introspectionData.append('client_id', 'thesis-thinkpink');
-    introspectionData.append('grant_type', 'urn:ietf:params:oauth:grant-type:uma-ticket');
+    const response = await axios.get(userInfoUrl, userInfoConfig);
 
-    const response = await axios.post(introspectionUrl, introspectionData.toString(), introspectionConfig);
-
-    if (response.data.active) {
-      return response.data.sub; //sub contains user id
+    // Check if the user information user ID
+    if (response.data && response.data.sub) {
+      console.log(response.data);
+      return response.data.is_caregiver?[response.data.sub,response.data.is_caregiver,response.data.assigned_user]:[response.data.sub,response.data.is_caregiver]; 
     } else {
-      throw new Error('Invalid token');
+      throw new Error('User information does not contain a valid user ID');
     }
   } catch (error) {
-    console.error('Failed to retrieve client_id:', error);
-    return -1;
+    console.error('Failed to retrieve user ID:', error);
+    return -1; 
   }
 }
+
 
 async function tokenVerification(req, res, next) {
 
   const token = req.headers.authorization?.split(' ')[1];
+  console.log(token);
 
   try {
     const tokenValid = await verifyToken(token);
+    console.log(!tokenValid?"Token Is Valid":"Unauthorized");
     if (tokenValid !== 0) {
       res.status(401).json({ error: 'Token invalid or expired' });
       return;
     }
 
-    const userId = await getUserId(token);
-    if (userId === -1) {
+    const resolvedUser = await resolveUser(token);
+    if (resolvedUser[0] === -1) {
       res.status(401).json({ error: 'Token invalid or expired' });
       return;
     }
 
-    req.userId = userId;
-    // if (allowedClients && !isClientIdInArray(clientId, allowedClients)) {
-    //   res.status(401).json({ error: 'Permission Denied' });
-    //   return;
-    // }
+    req.userId = resolvedUser[0];
+    req.isCaregiver = resolvedUser[1];
+    if(req.isCaregiver) req.assignedUser = resolvedUser[2];
 
+console.log(req.userId,req.isCaregiver,req.assignedUser);
+    console.log("tokenver complete");
     // All checks passed, proceed to the next middleware or route handler
     next();
   } catch (error) {
@@ -114,7 +132,13 @@ app.get('/getEvents', (req, res, next) => $thinkpink.verifyToken(req, res, next,
 	const collection = db.collection('events');
 
 	//const objectId = new ObjectId("65395ca09544dacb9c7372ab");
-	var result = await collection.find({ userId: req.userId }).toArray();
+  var eId=req.isCaregiver?req.assignedUser:req.userId;
+	 //var result = await collection.find({ userId: eId }).toArray();
+
+   var result = await collection.find({ 
+    userId: eId, 
+    noShow: { $ne: true } 
+    }).toArray();
 
     res.json(result);
 });
@@ -124,25 +148,23 @@ app.post('/createEvent', (req, res, next) => $thinkpink.verifyToken(req, res, ne
     await client.connect();
     const db = client.db('thinkpink');
     const collection = db.collection('events');
-
-    // Assuming you have a request body containing the event data
-    //const eventData = req.body;
+    var eId=req.isCaregiver?req.assignedUser:req.userId;
     const eventData = {
         ...req.body,
-        userId: req.userId
+        userId: eId
       };
 
     console.log("Inserted event: "+JSON.stringify(eventData)) 
-    // Insert the eventData into the 'events' collection
-    const result = await collection.insertOne(eventData);
 
-    // Check if the insertion was successful
-    if (result.insertedCount == 1) {
-      res.status(201).json({ message: 'Event created successfully' });
+    const result = await collection.insertOne(eventData);
+    console.log(result);
+
+    if (result.acknowledged) {
+      res.status(201).send("Created");
     }
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(403).send("Internal server error");
   } finally {
     await client.close();
   }
@@ -219,16 +241,17 @@ app.delete('/deleteEvent/:event_id', (req, res, next) => $thinkpink.verifyToken(
   }
 });
 
+
 app.get('/getLists', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thesis-thinkpink']), async (req, res) => {
   try {
     await client.connect();
     const db = client.db('thinkpink');
     const collection = db.collection('lists');
 
-    const lists = await collection.find({}).toArray();
+    const lists = await collection.find({userId: req.userId}).toArray();
     lists.forEach(list => {
       console.log('List:', list);
-      console.log('Items:', list.items);  // Log the items array explicitly
+      console.log('Items:', list.items); 
     });
     res.json(lists);
   } catch (error) {
@@ -247,7 +270,10 @@ app.post('/createList', (req, res, next) => $thinkpink.verifyToken(req, res, nex
     const db = client.db('thinkpink');
     const collection = db.collection('lists');
 
-    const listData = req.body;
+    const listData = {
+        ...req.body,
+        userId: req.userId
+      };
 
     console.log("Inserted list: " + JSON.stringify(listData));
 
@@ -311,15 +337,10 @@ app.post('/addItemToList/:list_id', (req, res, next) => $thinkpink.verifyToken(r
       res.status(404).json({ message: 'List not found' });
       return;
     }
-    if (!Array.isArray(list.items)) {
-          list.items = [];
-        }
 
-    list.items.push(newItem);
-
-    const result = await collection.updateOne(
+     const result = await collection.updateOne(
       { _id: new ObjectId(list_id) },
-      { $push: { items: list.items } }
+      { $push: { items: newItem } }
     );
   
     if (result.modifiedCount === 1) {

@@ -1,8 +1,0 @@
-{
-  "realm": "ThinkPink",
-  "auth-server-url": "http://localhost:8081",
-  "ssl-required": "external",
-  "resource": "thesis-thinkpink",
-  "public-client": true,
-  "confidential-port": 0
-}

@@ -95,3 +95,4 @@ dist/
 # TernJS port file
 .tern-port
 
+keycloak-secret
