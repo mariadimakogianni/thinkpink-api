@@ -42,6 +42,7 @@ keycloak.logger = console;
 //initialize the connection
 const client = new MongoClient('mongodb://localhost:27017/thinkpink');
 
+
 //Token verification
 async function verifyToken(token) {
   try {
@@ -105,8 +106,7 @@ async function tokenVerification(req, res, next) {
     req.userId = resolvedUser[0];
     req.isCaregiver = resolvedUser[1];
     if(req.isCaregiver) req.assignedUser = resolvedUser[2];
-
-console.log(req.userId,req.isCaregiver,req.assignedUser);
+    console.log(req.userId,req.isCaregiver,req.assignedUser);
     console.log("tokenver complete");
     // All checks passed, proceed to the next middleware or route handler
     next();
@@ -126,7 +126,7 @@ app.use(bodyParser.json());
 
 
 //API
-app.get('/getEvents', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thesis-thinkpink']), async (req, res) => {
+app.get('/getEvents', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thinkpink-api']), async (req, res) => {
 	await client.connect();
 	const db = client.db('thinkpink');
 	const collection = db.collection('events');
@@ -143,7 +143,7 @@ app.get('/getEvents', (req, res, next) => $thinkpink.verifyToken(req, res, next,
     res.json(result);
 });
 
-app.post('/createEvent', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thesis-thinkpink']), async (req, res) => {
+app.post('/createEvent', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thinkpink-api']), async (req, res) => {
   try {
     await client.connect();
     const db = client.db('thinkpink');
@@ -170,7 +170,7 @@ app.post('/createEvent', (req, res, next) => $thinkpink.verifyToken(req, res, ne
   }
 });
 
-app.patch('/editEvent/:event_id', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thesis-thinkpink']), async (req, res) => {
+app.patch('/editEvent/:event_id', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thinkpink-api']), async (req, res) => {
   try {
     const event_id = req.params.event_id;
     const updateData = req.body;
@@ -200,7 +200,7 @@ app.patch('/editEvent/:event_id', (req, res, next) => $thinkpink.verifyToken(req
   }
 });
 
-app.put('/doneEvent/:event_id', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thesis-thinkpink']), async (req, res) => {
+app.put('/doneEvent/:event_id', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thinkpink-api']), async (req, res) => {
   try {
     const event_id = req.params.event_id;
 
@@ -224,7 +224,7 @@ app.put('/doneEvent/:event_id', (req, res, next) => $thinkpink.verifyToken(req, 
   }
 });
 
-app.delete('/deleteEvent/:event_id', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thesis-thinkpink']), async (req, res) => {
+app.delete('/deleteEvent/:event_id', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thinkpink-api']), async (req, res) => {
   try {
     const event_id = req.params.event_id;
     await client.connect();
@@ -242,7 +242,7 @@ app.delete('/deleteEvent/:event_id', (req, res, next) => $thinkpink.verifyToken(
 });
 
 
-app.get('/getLists', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thesis-thinkpink']), async (req, res) => {
+app.get('/getLists', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thinkpink-api']), async (req, res) => {
   try {
     await client.connect();
     const db = client.db('thinkpink');
@@ -264,7 +264,7 @@ app.get('/getLists', (req, res, next) => $thinkpink.verifyToken(req, res, next, 
 
 
 
-app.post('/createList', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thesis-thinkpink']), async (req, res) => {
+app.post('/createList', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thinkpink-api']), async (req, res) => {
   try {
     await client.connect();
     const db = client.db('thinkpink');
@@ -292,7 +292,7 @@ app.post('/createList', (req, res, next) => $thinkpink.verifyToken(req, res, nex
   }
 });
 
-app.delete('/deleteList/:list_id', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thesis-thinkpink']), async (req, res) => {
+app.delete('/deleteList/:list_id', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thinkpink-api']), async (req, res) => {
   try {
     await client.connect();
     const db = client.db('thinkpink');
@@ -316,7 +316,7 @@ app.delete('/deleteList/:list_id', (req, res, next) => $thinkpink.verifyToken(re
   }
 });
 
-app.post('/addItemToList/:list_id', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thesis-thinkpink']), async (req, res) => {
+app.post('/addItemToList/:list_id', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thinkpink-api']), async (req, res) => {
   try {
     await client.connect();
     const db = client.db('thinkpink');
@@ -358,7 +358,7 @@ app.post('/addItemToList/:list_id', (req, res, next) => $thinkpink.verifyToken(r
   }
 });
 
-app.delete('/deleteItemFromList/:list_id/:item_index', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thesis-thinkpink']), async (req, res) => {
+app.delete('/deleteItemFromList/:list_id/:item_index', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thinkpink-api']), async (req, res) => {
   try {
     await client.connect();
     const db = client.db('thinkpink');
