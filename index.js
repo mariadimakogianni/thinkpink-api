@@ -73,7 +73,9 @@ async function resolveUser(token) {
     // Check if the user information user ID
     if (response.data && response.data.sub) {
       console.log(response.data);
-      return response.data.is_caregiver?[response.data.sub,response.data.is_caregiver,response.data.assigned_user]:[response.data.sub,response.data.is_caregiver]; 
+      console.log(response.data.assigned_user_name);
+      return response.data.is_caregiver?[response.data.sub,response.data.is_caregiver,response.data.assigned_user,response.data.assigned_user_name]:[response.data.sub,response.data.is_caregiver]; 
+
     } else {
       throw new Error('User information does not contain a valid user ID');
     }
@@ -106,7 +108,8 @@ async function tokenVerification(req, res, next) {
     req.userId = resolvedUser[0];
     req.isCaregiver = resolvedUser[1];
     if(req.isCaregiver) req.assignedUser = resolvedUser[2];
-    console.log(req.userId,req.isCaregiver,req.assignedUser);
+    if(req.isCaregiver) req.assignedUserName = resolvedUser[3];
+    console.log("req",req.userId,req.isCaregiver,req.assignedUser,req.assignedUserName);
     console.log("tokenver complete");
     // All checks passed, proceed to the next middleware or route handler
     next();
@@ -118,11 +121,51 @@ async function tokenVerification(req, res, next) {
 
 $thinkpink.verifyToken = tokenVerification;
 
+app.use(bodyParser.json());
+
+app.put('/updateUserProfile', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thinkpink-api']), async (req, res) => {
+  try {
+    console.log('Request body:', req.body)
+    const firstName = req.body.firstName;
+    const lastName = req.body.lastName;
+    const email = req.body.email;
+    const userId = req.userId;
+
+    const userToken = req.headers.authorization.split(' ')[1];
+
+    const accountUrl = `http://localhost:8081/realms/ThinkPink/account`;
+
+    const response = await axios.put(
+      accountUrl,
+      {
+        firstName: firstName,
+        lastName: lastName,
+        email: email
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${userToken}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (response.status === 204) { 
+      res.status(200).json({ message: 'Profile updated successfully' });
+    } else {
+      res.status(response.status).json({ message: 'Failed to update profile in Keycloak' });
+    }
+  } catch (error) {
+    console.error('Error updating profile in Keycloak:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 
 
 // Allow requests from this origin
 app.use(cors({ origin: 'http://localhost:8080' })); 
-app.use(bodyParser.json());
+
 
 
 //API
