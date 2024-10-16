@@ -745,7 +745,7 @@ app.post('/shareProject/:projectId', (req, res, next) => $thinkpink.verifyToken(
 
     console.log(`User to share with: ${userToShareWith.email} (ID: ${userToShareWith.id})`);
 
-    // Update the project to add the shared user (store both email and user ID)
+    // Update the project to add the shared user
     const sharedUser = { userId: userToShareWith.id, email: userToShareWith.email };
     const alreadyShared = project.sharedWith.some(u => u.userId === userToShareWith.id);
 
