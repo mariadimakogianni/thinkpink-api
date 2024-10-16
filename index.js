@@ -2,6 +2,10 @@ const express = require('express');
 const app = express();
 const port = 3000;
 const cors = require('cors'); 
+
+// Allow requests from this origin
+app.use(cors({ origin: 'http://localhost:8080' })); 
+
 const bodyParser = require('body-parser');
 const { ObjectId } = require('mongodb'); // Import the ObjectId constructor
 const fs = require('fs');
@@ -41,6 +45,51 @@ keycloak.logger = console;
 
 //initialize the connection
 const client = new MongoClient('mongodb://localhost:27017/thinkpink');
+
+//Retrive Email for Project SHaring
+async function findUserIdByEmail(email) {
+  try {
+    const keycloakTokenUrl = 'http://localhost:8081/realms/ThinkPink/protocol/openid-connect/token';
+    const keycloakAdminUrl = 'http://localhost:8081/admin/realms/ThinkPink/users';
+    const clientSecret = fs.readFileSync(path.join(__dirname, 'keycloak-secret'), 'utf-8').trim();
+
+    // Get admin access token for Keycloak
+    const tokenResponse = await axios.post(
+      keycloakTokenUrl,
+      {
+        client_id: 'thinkpink-api', 
+        client_secret: clientSecret, 
+        grant_type: 'client_credentials' 
+      },
+      {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      }
+    );
+
+    console.log('Keycloak admin token obtained successfully',tokenResponse);
+
+    const admintoken = tokenResponse.data.access_token;
+
+    // Search for the user by email
+    const usersResponse = await axios.get(`${keycloakAdminUrl}?email=${email}`, {
+      headers: { Authorization: `Bearer ${admintoken}` , 'Content-Type': 'application/x-www-form-urlencoded' },
+    });
+
+    console.log(`Keycloak user search response: ${JSON.stringify(usersResponse.data)}`); 
+
+    if (usersResponse.data.length > 0) {
+      console.log(`User found: ${usersResponse.data[0].email}, ID: ${usersResponse.data[0].id}`);
+      return usersResponse.data[0]; // Return the user object (contains ID and email)
+    } else {
+      console.log('No user found with the provided email');
+      throw new Error('User not found');
+    }
+  } catch (error) {
+    console.error('Error finding user by email:', error);
+    throw error;
+  }
+}
+
 
 
 //Token verification
@@ -125,46 +174,60 @@ app.use(bodyParser.json());
 
 app.put('/updateUserProfile', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thinkpink-api']), async (req, res) => {
   try {
-    console.log('Request body:', req.body)
-    const firstName = req.body.firstName;
-    const lastName = req.body.lastName;
-    const email = req.body.email;
-    const userId = req.userId;
+    console.log('Request body:', req.body);
+    
+    const { firstName, lastName, email, password} = req.body;
+    const userId = req.userId; // userId from the validated token
 
-    const userToken = req.headers.authorization.split(' ')[1];
+    //Get admin token from Keycloak
+    const keycloakTokenUrl = 'http://localhost:8081/realms/ThinkPink/protocol/openid-connect/token';
+    const keycloakAdminUrl = `http://localhost:8081/admin/realms/ThinkPink/users/${userId}`; // Admin endpoint for updating user
+    const clientSecret = fs.readFileSync(path.join(__dirname, 'keycloak-secret'), 'utf-8').trim();
 
-    const accountUrl = `http://localhost:8081/realms/ThinkPink/account`;
+    const tokenResponse = await axios.post(
+      keycloakTokenUrl,
+      `client_id=thinkpink-api&client_secret=${clientSecret}&grant_type=client_credentials`,
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    );
 
-    const response = await axios.put(
-      accountUrl,
+    const adminToken = tokenResponse.data.access_token;
+
+    // const decodedToken = JSON.parse(Buffer.from(adminToken.split('.')[1], 'base64').toString());
+    // console.log('Decoded admin token:', decodedToken);
+
+
+    console.log('Keycloak admin token obtained successfully',adminToken);
+
+    // Make the request to update user profile using the Admin API
+    const updateProfileResponse = await axios.put(
+      keycloakAdminUrl,
       {
         firstName: firstName,
         lastName: lastName,
-        email: email
+        email: email,
       },
       {
         headers: {
-          Authorization: `Bearer ${userToken}`,
+          Authorization: `Bearer ${adminToken}`,
           'Content-Type': 'application/json',
         },
       }
     );
 
-    if (response.status === 204) { 
+    if (updateProfileResponse.status === 204) { 
       res.status(200).json({ message: 'Profile updated successfully' });
     } else {
-      res.status(response.status).json({ message: 'Failed to update profile in Keycloak' });
+      res.status(updateResponse.status).json({ message: 'Failed to update profile in Keycloak' });
     }
+
+
   } catch (error) {
-    console.error('Error updating profile in Keycloak:', error);
+    console.error('Error updating profile in Keycloak:', error.response?.data || error.message);
     res.status(500).json({ message: 'Internal server error' });
   }
 });
 
 
-
-// Allow requests from this origin
-app.use(cors({ origin: 'http://localhost:8080' })); 
 
 
 
@@ -464,15 +527,25 @@ app.delete('/deleteItemFromList/:list_id/:item_index', (req, res, next) => $thin
 
 app.get('/getProjects', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thinkpink-api']), async (req, res) => {
   try {
+
+    const userId = req.userId;
+
     await client.connect();
     const db = client.db('thinkpink');
     const collection = db.collection('projects');
 
-    const projects = await collection.find({userId: req.userId}).toArray();
+    const projects = await collection.find({
+      $or: [
+        { userId: userId }, // Projects owned by the user
+        { 'sharedWith.userId': userId } // Projects shared with the user
+      ],
+    }).toArray();
+
     projects.forEach(project => {
       console.log('Project:', project);
       console.log('Items:', project.items); 
     });
+
     res.json(projects);
   } catch (error) {
     console.error(error);
@@ -639,6 +712,65 @@ app.delete('/deleteItemFromProject/:project_id/:item_index', (req, res, next) =>
     await client.close();
   }
 });
+
+
+app.post('/shareProject/:projectId', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thinkpink-api']), async (req, res) => {
+  try {
+    const projectId = req.params.projectId;
+    const userId = req.userId; 
+    const { email } = req.body;
+
+    console.log(`Starting project share for projectId: ${projectId} by userId: ${userId} to email: ${email}`);
+
+    await client.connect();
+    const db = client.db('thinkpink');
+    const collection = db.collection('projects');
+
+    // Find the project owned by the current user
+    const project = await collection.findOne({ _id: new ObjectId(projectId), userId });
+
+    if (!project) {
+      console.log(`Project not found or unauthorized: ${projectId}`);
+      return res.status(403).json({ message: 'Not authorized to share this project' });
+    }
+
+    console.log(`Project found: ${project.title} (ID: ${projectId})`);
+
+    //Find the user ID by email using the Keycloak Admin API
+    const userToShareWith = await findUserIdByEmail(email);
+
+    console.log(`User to share with: ${userToShareWith.email} (ID: ${userToShareWith.id})`);
+
+    // Update the project to add the shared user (store both email and user ID)
+    const sharedUser = { userId: userToShareWith.id, email: userToShareWith.email };
+    const alreadyShared = project.sharedWith.some(u => u.userId === userToShareWith.id);
+
+    if (!alreadyShared) {
+      const updateResult = await collection.updateOne(
+        { _id: new ObjectId(projectId) },
+        { $push: { sharedWith: sharedUser } }
+      );
+      console.log(`User ${userToShareWith.email} added to shared list for project: ${project.title}`);
+
+      if (updateResult.modifiedCount === 1) {
+        return res.status(200).json({ message: 'Project shared successfully', sharedWith: project.sharedWith.concat(sharedUser) });
+      } else {
+        return res.status(500).json({ message: 'Failed to update the project' });
+      }
+    } else {
+      console.log(`User ${userToShareWith.email} is already shared with the project`);
+      return res.status(200).json({ message: 'User is already shared', sharedWith: project.sharedWith });
+    }
+
+  } catch (error) {
+    console.error('Error in shareProject:', error.message || error);
+    res.status(500).json({ message: 'Internal server error', error: error.message || error });
+  } finally {
+    await client.close(); 
+  }
+});
+
+
 
 
 
