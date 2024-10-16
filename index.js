@@ -401,6 +401,33 @@ app.post('/addItemToList/:list_id', (req, res, next) => $thinkpink.verifyToken(r
   }
 });
 
+app.patch('/updateItemDoneLists/:list_id/:item_id', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thinkpink-api']), async (req, res) => {
+  try {
+    await client.connect();
+    const db = client.db('thinkpink');
+    const collection = db.collection('lists');
+    const list_id = req.params.list_id;
+    const item_id = req.params.item_id;
+    const done = req.body.done;
+
+    const result = await collection.updateOne(
+      { _id: new ObjectId(list_id), "items._id": new ObjectId(item_id) },
+      { $set: { "items.$.done": done } }
+    );
+
+    if (result.modifiedCount === 1) {
+      res.status(200).json({ message: 'Item updated successfully' });
+    } else {
+      res.status(404).json({ message: 'Item or list not found' });
+    }
+  } catch (error) {
+    console.error('Error updating item status:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  } finally {
+    await client.close();
+  }
+});
+
 app.delete('/deleteItemFromList/:list_id/:item_index', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thinkpink-api']), async (req, res) => {
   try {
     await client.connect();
@@ -434,6 +461,186 @@ app.delete('/deleteItemFromList/:list_id/:item_index', (req, res, next) => $thin
     await client.close();
   }
 });
+
+app.get('/getProjects', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thinkpink-api']), async (req, res) => {
+  try {
+    await client.connect();
+    const db = client.db('thinkpink');
+    const collection = db.collection('projects');
+
+    const projects = await collection.find({userId: req.userId}).toArray();
+    projects.forEach(project => {
+      console.log('Project:', project);
+      console.log('Items:', project.items); 
+    });
+    res.json(projects);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Internal server error' });
+  } finally {
+    await client.close();
+  }
+});
+
+app.post('/createProject', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thinkpink-api']), async (req, res) => {
+  try {
+    await client.connect();
+    const db = client.db('thinkpink');
+    const collection = db.collection('projects');
+
+    const projectData = {
+        ...req.body,
+        userId: req.userId
+      };
+
+    console.log("Inserted project: " + JSON.stringify(projectData));
+
+    const result = await collection.insertOne(projectData);
+
+    if (result.insertedId) {
+      res.status(201).json({ message: 'Project created successfully', projectId: result.insertedId });
+    } else {
+      res.status(500).json({ message: 'Failed to create project' });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Internal server error' });
+  } finally {
+    await client.close();
+  }
+});
+
+app.delete('/deleteProject/:project_id', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thinkpink-api']), async (req, res) => {
+  try {
+    await client.connect();
+    const db = client.db('thinkpink');
+    const collection = db.collection('projects');
+    const project_id = req.params.project_id;
+
+    const result = await collection.deleteOne({ _id: new ObjectId(project_id) });
+
+    if (result.deletedCount === 1) {
+      console.log("Project deleted successfully", project_id);
+      res.status(200).json({ message: 'Project deleted successfully' });
+    } else {
+      res.status(404).json({ message: 'Project not found' });
+    }
+  } catch (error) {
+    console.error('Error in deleteProject:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+  finally {
+    await client.close();
+  }
+});
+
+app.post('/addItemToProject/:project_id', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thinkpink-api']), async (req, res) => {
+  try {
+    await client.connect();
+    const db = client.db('thinkpink');
+    const collection = db.collection('projects');
+    const project_id = req.params.project_id;
+    const newItem = req.body;
+
+    console.log("Adding item to project:", project_id);
+    console.log("New item:", newItem);
+
+     if (!newItem._id) {
+      newItem._id = new ObjectId(); 
+    }
+
+    const project = await collection.findOne({ _id: new ObjectId(project_id) });
+
+    if (!project) {
+      res.status(404).json({ message: 'Project not found' });
+      return;
+    }
+
+     const result = await collection.updateOne(
+      { _id: new ObjectId(project_id) },
+      { $push: { items: newItem } }
+    );
+  
+    if (result.modifiedCount === 1) {
+      console.log("Update result:", result);
+      res.status(200).json({ message: 'Item added successfully api', newItem });
+    } else {
+      res.status(404).json({ message: 'Project not found' });
+    }
+  } catch (error) {
+    console.error('Error in addItemToProject:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+  finally {
+    await client.close();
+  }
+});
+
+app.patch('/updateItemDoneProjects/:project_id/:item_id', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thinkpink-api']), async (req, res) => {
+  try {
+    await client.connect();
+    const db = client.db('thinkpink');
+    const collection = db.collection('projects');
+    const project_id = req.params.project_id;
+    const item_id = req.params.item_id;
+    const done = req.body.done;
+
+    console.log("Done item to project:", project_id);
+    console.log("Done item:", item_id);
+
+    const result = await collection.updateOne(
+      { _id: new ObjectId(project_id), "items._id": new ObjectId(item_id) },
+      { $set: { "items.$.done": done } }
+    );
+
+    if (result.modifiedCount === 1) {
+      res.status(200).json({ message: 'Item updated successfully' });
+    } else {
+      res.status(404).json({ message: 'Item or project not found' });
+    }
+  } catch (error) {
+    console.error('Error updating item status:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  } finally {
+    await client.close();
+  }
+});
+
+app.delete('/deleteItemFromProject/:project_id/:item_index', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thinkpink-api']), async (req, res) => {
+  try {
+    await client.connect();
+    const db = client.db('thinkpink');
+    const collection = db.collection('projects');
+    const project_id = req.params.project_id;
+    const item_index = parseInt(req.params.item_index);
+
+    const project = await collection.findOne({ _id: new ObjectId(project_id) });
+
+    if (project) {
+      if (item_index >= 0 && item_index < project.items.length) {
+        project.items.splice(item_index, 1);
+
+        const result = await collection.updateOne(
+          { _id: new ObjectId(project_id) },
+          { $set: { items: project.items } }
+        );
+        res.status(200).json({ message: 'Item deleted successfully' });
+      } else {
+        res.status(400).json({ message: 'Invalid item index' });
+      }
+    } else {
+      res.status(404).json({ message: 'Project not found' });
+    }
+  } catch (error) {
+    console.error('Error in deleteItemFromProject:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+  finally {
+    await client.close();
+  }
+});
+
+
 
 const API_PORT = process.env.API_PORT || 3000;
 app.listen(API_PORT, () => console.log(`Express API listening on port ${API_PORT}`));
