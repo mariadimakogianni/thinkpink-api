@@ -736,6 +736,10 @@ app.post('/shareProject/:projectId', (req, res, next) => $thinkpink.verifyToken(
 
     console.log(`Project found: ${project.title} (ID: ${projectId})`);
 
+    if (!Array.isArray(project.sharedWith)) {
+      project.sharedWith = [];
+    }
+
     //Find the user ID by email using the Keycloak Admin API
     const userToShareWith = await findUserIdByEmail(email);
 
