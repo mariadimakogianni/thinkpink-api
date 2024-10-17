@@ -254,7 +254,27 @@ app.post('/assignCaregiver', async (req, res, next) => $thinkpink.verifyToken(re
 
     console.log(`User to be caregiver: ${userEmail} (ID: ${assignedUser.id})`);
 
-    //get current user data
+    //check if assignedUser is already a caregiver
+    const assignedUserUrl = `http://localhost:8081/admin/realms/ThinkPink/users/${assignedUser.id}`;
+    const assignedUserResponse = await axios.get(assignedUserUrl, {
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const assignedUserData = assignedUserResponse.data;
+
+    console.log("assignes user data ", assignedUserData);
+
+    if (assignedUserData.attributes &&
+      Array.isArray(assignedUserData.attributes.is_caregiver) && 
+      assignedUserData.attributes.is_caregiver.includes('true')) {
+      console.log(`User ${assignedUser.email} is already a caregiver. Cannot reassign.`);
+      return res.status(400).json({ message: 'The user is already a caregiver and cannot be reassigned.' });
+    }
+
+    //get current user data and change them
     const userResponse = await axios.get(keycloakAdminUrl, {
       headers: {
         Authorization: `Bearer ${adminToken}`,
