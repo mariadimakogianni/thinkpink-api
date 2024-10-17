@@ -66,7 +66,7 @@ async function findUserIdByEmail(email) {
       }
     );
 
-    console.log('Keycloak admin token obtained successfully',tokenResponse);
+    console.log('Keycloak admin token obtained successfully');
 
     const admintoken = tokenResponse.data.access_token;
 
@@ -224,6 +224,73 @@ app.put('/updateUserProfile', (req, res, next) => $thinkpink.verifyToken(req, re
   } catch (error) {
     console.error('Error updating profile in Keycloak:', error.response?.data || error.message);
     res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+app.post('/assignCaregiver', async (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thinkpink-api']), async (req, res) => {
+  try {
+    const { isCaregiver, userEmail } = req.body;
+    const userId = req.userId; 
+
+     console.log(`Current logged-in user ID: ${userId}`);
+
+    console.log("email",userEmail);
+
+    // Get admin token from Keycloak
+    const keycloakTokenUrl = 'http://localhost:8081/realms/ThinkPink/protocol/openid-connect/token';
+    const keycloakAdminUrl = `http://localhost:8081/admin/realms/ThinkPink/users/${userId}`;
+    const clientSecret = fs.readFileSync(path.join(__dirname, 'keycloak-secret'), 'utf-8').trim();
+
+    const tokenResponse = await axios.post(
+      keycloakTokenUrl,
+      `client_id=thinkpink-api&client_secret=${clientSecret}&grant_type=client_credentials`,
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    );
+
+    const adminToken = tokenResponse.data.access_token;
+    console.log('Keycloak admin token obtained successfully');
+
+    const assignedUser = await findUserIdByEmail(userEmail);
+
+    console.log(`User to be caregiver: ${userEmail} (ID: ${assignedUser.id})`);
+
+    //get current user data
+    const userResponse = await axios.get(keycloakAdminUrl, {
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const userData = userResponse.data;
+
+    userData.attributes = {
+      ...userData.attributes, // keep existing attributes
+      is_caregiver: true,
+      assigned_user: assignedUser.id,
+      assigned_user_name: assignedUser.email,
+    };
+
+
+    const updateCaregiver = await axios.put(
+      keycloakAdminUrl,
+      userData,
+      {
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (updateCaregiver.status === 204) {
+      return res.status(200).json({ message: 'Caregiver assignment updated successfully' });
+    } else {
+      return res.status(updateCaregiver.status).json({ message: 'Failed to update caregiver assignment' });
+    }
+  } catch (error) {
+    console.error('Error assigning caregiver:', error.message || error);
+    res.status(500).json({ message: 'Internal server error', error: error.message || error });
   }
 });
 
