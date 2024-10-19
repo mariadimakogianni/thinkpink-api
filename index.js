@@ -1,19 +1,21 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const app = express();
 const port = 3000;
 const cors = require('cors'); 
 const bodyParser = require('body-parser');
-//const mongoSanitize = require('express-mongo-sanitize');
-
 app.use(bodyParser.json());
 
-// //Prevent noSql attacks
-// app.use(
-//   mongoSanitize({
-//     replaceWith: '_', // Replace prohibited characters with _
-//   })
-// );
+//Limit for BruteForce 
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit IP to 100 requests
+  message: "Too many requests from this IP, please try again later.",
+  standardHeaders: true, 
+  legacyHeaders: false,
+});
 
+app.use(generalLimiter);
 
 //Sanitize HTML + noSql from body
 const combinedSanitize = require('./sanitizeHTML');
