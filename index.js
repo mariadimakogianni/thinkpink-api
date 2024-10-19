@@ -1,5 +1,6 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
 const app = express();
 const port = 3000;
 const cors = require('cors'); 
@@ -12,7 +13,7 @@ const generalLimiter = rateLimit({
   max: 100, // Limit IP to 100 requests
   message: "Too many requests from this IP, please try again later.",
   standardHeaders: true, 
-  legacyHeaders: false,
+  legacyHeaders: false, //old headers
 });
 
 app.use(generalLimiter);
@@ -20,6 +21,22 @@ app.use(generalLimiter);
 //Sanitize HTML + noSql from body
 const combinedSanitize = require('./sanitizeHTML');
 app.use(combinedSanitize);
+
+//Helmet for General Security Headers
+app.use(helmet());
+
+app.use(
+  helmet.contentSecurityPolicy({
+    directives: {
+      defaultSrc: ["'self'", "https://localhost:8080"], // Allow resources from self
+      scriptSrc: ["'self'", "https://localhost:8080"], // Allow scripts from the self + frontend
+      styleSrc: ["'self'", "https://localhost:8080"], // Allow styles and self + frontend
+      imgSrc: ["'self'", "data:", "https://localhost:8080"], // Allow images from self and data and fronend
+      connectSrc: ["'self'", "https://localhost:8080",  "http://localhost:8081" ], // Allow connections from self + frontend + keycloak
+      frameSrc: ["'none'"], // Prevent iframe
+    },
+  })
+);
 
 // Allow requests from this origin
 app.use(cors({ origin: 'https://localhost:8080' })); 
