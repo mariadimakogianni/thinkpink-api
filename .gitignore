@@ -97,8 +97,8 @@ dist/
 
 keycloak-secret
 
-# ssl/
+ssl/
 
-# server.crt
+server.crt
 
-# server.key
+server.key
