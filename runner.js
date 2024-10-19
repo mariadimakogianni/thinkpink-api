@@ -3,6 +3,9 @@ const dbUrl = 'mongodb://localhost:27017/thinkpink';
 const { MongoClient } = require('mongodb'); 
 const client = new MongoClient('mongodb://localhost:27017/thinkpink');
 
+
+//Update done for Routines
+
 async function updateEvents() { 
  try {
 
@@ -27,6 +30,8 @@ async function updateEvents() {
     return 0;
 }
 
+//Remove events from Done when they have passed 30 days
+
 async function removeOldEvents() {
     try {
 
@@ -38,8 +43,9 @@ async function removeOldEvents() {
 
 	const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const thirtyDaysAgoString = thirtyDaysAgo.toISOString();
 
-	const result = await collection.updateMany({ date: { $lt: thirtyDaysAgo }, done: true }, { $set: { noShow: true } });
+	const result = await collection.updateMany({ date: { $lt: thirtyDaysAgoString }, done: true }, { $set: { noShow: true } });
 
 	console.log(`${result.matchedCount} document(s) matched the filter`);
 	console.log(`${result.modifiedCount} document(s) were updated`);
@@ -61,22 +67,32 @@ async function updateFrequency() {
         const db = client.db('thinkpink');
         const collection = db.collection('events');
 
-        const today = new Date();
-        today.setUTCHours(0, 0, 0, 0); 
+        //For Greece
 
-        const tomorrow = new Date(today);
-        tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+        const startOfTodayUTC = new Date();
+        startOfTodayUTC.setUTCDate(startOfTodayUTC.getUTCDate() - 1); 
+        startOfTodayUTC.setUTCHours(21, 0, 0, 0); // 21:00 UTC is midnight in Greece
+        const todayString = startOfTodayUTC.toISOString();
+        console.log("Today's date:", todayString);
+
+        const startOfTomorrowUTC = new Date(startOfTodayUTC);
+        startOfTomorrowUTC.setUTCDate(startOfTomorrowUTC.getUTCDate() + 1); 
+        const tomorrowString = startOfTomorrowUTC.toISOString();
+        console.log("Tomorrow's date:", tomorrowString);
+
 
         // Fetch events for today
         const events = await collection.find({
-            date: { $gte: today, $lt: tomorrow },
+            date: { $gte: todayString, $lt: tomorrowString },
             type: { $ne: 'Routine' },
-            done: false
         }).toArray();
+        console.log(`Found ${events} for today .`);
 
         // Process each event and create a new one based on the frequency
         for (const event of events) {
             let newDate;
+
+            console.log(`Processing event: ${event._id}, Frequency: ${event.frequency}`);
 
             // Calculate the new date based on the frequency
             switch (event.frequency) {
@@ -97,11 +113,12 @@ async function updateFrequency() {
                     newDate.setFullYear(newDate.getFullYear() + 1);
                     break;
                 case 'Custom':
-                    if (event.frequency2) {
+                    const customDays = parseInt(event.frequency2, 10);
+                    if (!isNaN(customDays)) {
                         newDate = new Date(event.date);
-                        newDate.setDate(newDate.getDate() + event.frequency2);
+                        newDate.setDate(newDate.getDate() + customDays);
                     } else {
-                        console.warn(`Event ${event._id} has 'Custom' frequency but no 'frequency2' value.`);
+                        console.warn(`Event ${event._id} has 'Custom' frequency but no 'frequency2'.`);
                         continue;
                     }
                     break;
@@ -110,11 +127,14 @@ async function updateFrequency() {
                     continue;
             }
 
-            // Create a new event with the updated date and other attributes
+            const newDateString = newDate.toISOString();
+            console.log(`New date for event ${event._id}:`, newDateString);
+
+            // Create a new event with the updated date
             const newEvent = {
                 ...event,
                 _id: new ObjectId(), 
-                date: newDate,
+                date: newDateString,
                 done: false, 
             };
 
@@ -128,7 +148,6 @@ async function updateFrequency() {
         console.error('Error updating events:', err);
         return 1;
     } finally {
-        // Close the connection
         await client.close();
     }
     console.log("DONE!");
