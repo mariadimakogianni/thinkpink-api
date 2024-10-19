@@ -96,3 +96,7 @@ dist/
 .tern-port
 
 keycloak-secret
+
+server.crt
+
+server.key
