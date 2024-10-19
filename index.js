@@ -4,12 +4,20 @@ const port = 3000;
 const cors = require('cors'); 
 
 // Allow requests from this origin
-app.use(cors({ origin: 'http://localhost:8080' })); 
+app.use(cors({ origin: 'https://localhost:8080' })); 
 
 const bodyParser = require('body-parser');
 const { ObjectId } = require('mongodb'); // Import the ObjectId constructor
 const fs = require('fs');
 const path = require('path');
+
+//HTTPS CODE
+const https = require('https');
+
+const options = {
+  key: fs.readFileSync(path.join(__dirname, 'ssl', 'server.key')),
+  cert: fs.readFileSync(path.join(__dirname, 'ssl', 'server.crt')),
+};
 
 //define url of mongo
 const dbUrl = 'mongodb://localhost:27017/thinkpink';
@@ -866,5 +874,8 @@ app.post('/shareProject/:projectId', (req, res, next) => $thinkpink.verifyToken(
 
 
 const API_PORT = process.env.API_PORT || 3000;
-app.listen(API_PORT, () => console.log(`Express API listening on port ${API_PORT}`));
+https.createServer(options, app).listen(API_PORT, () => {
+  console.log(`Express API listening on port ${API_PORT}`);
+});
+//app.listen(API_PORT, () => console.log(`Express API listening on port ${API_PORT}`));
 

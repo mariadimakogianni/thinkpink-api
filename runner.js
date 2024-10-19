@@ -45,7 +45,7 @@ async function removeOldEvents() {
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const thirtyDaysAgoString = thirtyDaysAgo.toISOString();
 
-	const result = await collection.updateMany({ date: { $lt: thirtyDaysAgoString }, done: true }, { $set: { noShow: true } });
+	const result = await collection.updateMany({ date: { $lt: thirtyDaysAgoString }}, { $set: { noShow: true } });
 
 	console.log(`${result.matchedCount} document(s) matched the filter`);
 	console.log(`${result.modifiedCount} document(s) were updated`);
