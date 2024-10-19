@@ -2,11 +2,27 @@ const express = require('express');
 const app = express();
 const port = 3000;
 const cors = require('cors'); 
+const bodyParser = require('body-parser');
+//const mongoSanitize = require('express-mongo-sanitize');
+
+app.use(bodyParser.json());
+
+// //Prevent noSql attacks
+// app.use(
+//   mongoSanitize({
+//     replaceWith: '_', // Replace prohibited characters with _
+//   })
+// );
+
+
+//Sanitize HTML + noSql from body
+const combinedSanitize = require('./sanitizeHTML');
+app.use(combinedSanitize);
 
 // Allow requests from this origin
 app.use(cors({ origin: 'https://localhost:8080' })); 
 
-const bodyParser = require('body-parser');
+
 const { ObjectId } = require('mongodb'); // Import the ObjectId constructor
 const fs = require('fs');
 const path = require('path');
@@ -178,7 +194,7 @@ async function tokenVerification(req, res, next) {
 
 $thinkpink.verifyToken = tokenVerification;
 
-app.use(bodyParser.json());
+
 
 app.put('/updateUserProfile', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thinkpink-api']), async (req, res) => {
   try {
