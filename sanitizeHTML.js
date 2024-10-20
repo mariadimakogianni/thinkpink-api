@@ -8,7 +8,7 @@ function deepSanitize(input) {
       allowedTags: [], // Remove all HTML tags
       allowedAttributes: {}, // Remove all attributes
     })
-    .replace(/[\0$./{}[\]\\]/g, '_') // Replace null bytes, $, ., /, {, }, [, ], and backslashes
+    .replace(/[\0$/{}[\]\\]/g, '_') // Replace null bytes, $, /, {, }, [, ], and backslashes
     .trim();
   } else if (typeof input === 'object' && input !== null) {
     //Sanitize each key and value in the object

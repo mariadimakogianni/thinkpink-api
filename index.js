@@ -217,10 +217,10 @@ $thinkpink.verifyToken = tokenVerification;
 
 app.put('/updateUserProfile', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thinkpink-api']), async (req, res) => {
   try {
-    console.log('Request body:', req.body);
+    //console.log('Request body:', req.body);
     
     const { firstName, lastName, email, password} = req.body;
-    const userId = req.userId; // userId from the validated token
+    const userId = req.userId; 
 
     //Get admin token from Keycloak
     const keycloakTokenUrl = 'http://localhost:8081/realms/ThinkPink/protocol/openid-connect/token';
@@ -241,7 +241,6 @@ app.put('/updateUserProfile', (req, res, next) => $thinkpink.verifyToken(req, re
 
     console.log('Keycloak admin token obtained successfully',adminToken);
 
-    // Make the request to update user profile using the Admin API
     const updateProfileResponse = await axios.put(
       keycloakAdminUrl,
       {
@@ -257,12 +256,40 @@ app.put('/updateUserProfile', (req, res, next) => $thinkpink.verifyToken(req, re
       }
     );
 
-    if (updateProfileResponse.status === 204) { 
-      res.status(200).json({ message: 'Profile updated successfully' });
-    } else {
-      res.status(updateResponse.status).json({ message: 'Failed to update profile in Keycloak' });
+    if (updateProfileResponse.status !== 204) { 
+      return res.status(updateProfileResponse.status).json({ message: 'Failed to update profile in Keycloak' });
     }
 
+
+    if (password) {
+      //console.log('Password:', password);
+
+      try {
+      const updatePasswordResponse = await axios.put(
+        `${keycloakAdminUrl}/reset-password`, //endpoint for password change in Keycloak
+        {
+          type: 'password',
+          value: password,
+          temporary: false,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (updatePasswordResponse.status !== 204) {
+          return res.status(updatePasswordResponse.status).json({ message: 'Failed to update password in Keycloak' });
+        }
+      } catch (passwordError) {
+        console.error('Error updating password in Keycloak:', passwordError.response?.data || passwordError.message);
+        return res.status(500).json({ message: 'Error updating password in Keycloak' });
+      }
+    }
+
+    return res.status(200).json({ message: 'Profile updated successfully' });
 
   } catch (error) {
     console.error('Error updating profile in Keycloak:', error.response?.data || error.message);
