@@ -421,7 +421,74 @@ app.post('/assignCaregiver', async (req, res, next) => $thinkpink.verifyToken(re
   }
 });
 
+app.delete('/removeAssignedUser', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thinkpink-api']), async (req, res) => {
+  try {
+    const { userEmail } = req.body;
+    const userId = req.userId; 
 
+    console.log(`Current logged-in user ID: ${userId}`);
+    console.log("Removing assigned user with email:", userEmail);
+
+    const keycloakTokenUrl = 'http://localhost:8081/realms/ThinkPink/protocol/openid-connect/token';
+    const keycloakAdminUrl = `http://localhost:8081/admin/realms/ThinkPink/users/${userId}`;
+    const clientSecret = fs.readFileSync(path.join(__dirname, 'keycloak-secret'), 'utf-8').trim();
+
+    const tokenResponse = await axios.post(
+      keycloakTokenUrl,
+      `client_id=thinkpink-api&client_secret=${clientSecret}&grant_type=client_credentials`,
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    );
+
+    const adminToken = tokenResponse.data.access_token;
+    console.log('Keycloak admin token obtained successfully');
+
+    // Current user's details to modify their assigned users
+    const userResponse = await axios.get(keycloakAdminUrl, {
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const userData = userResponse.data;
+
+    const existingAssignedUsers = userData.attributes.assigned_user || [];
+    const existingAssignedUserNames = userData.attributes.assigned_user_name || [];
+
+    const emailIndex = existingAssignedUserNames.indexOf(userEmail);
+
+    if (emailIndex !== -1) {
+      const removedUserId = existingAssignedUsers[emailIndex];
+      existingAssignedUsers.splice(emailIndex, 1);
+      existingAssignedUserNames.splice(emailIndex, 1);
+
+      userData.attributes.assigned_user = existingAssignedUsers;
+      userData.attributes.assigned_user_name = existingAssignedUserNames;
+
+      const updateResponse = await axios.put(
+        keycloakAdminUrl,
+        userData,
+        {
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (updateResponse.status === 204) {
+        return res.status(200).json({ message: 'Assigned user removed successfully' });
+      } else {
+        return res.status(updateResponse.status).json({ message: 'Failed to update assigned users' });
+      }
+    } else {
+      return res.status(400).json({ message: 'Assigned user not found' });
+    }
+  } catch (error) {
+    console.error('Error removing assigned user:', error.response?.data || error.message || error);
+    res.status(500).json({ message: 'Internal server error', error: error.message || error });
+  }
+});
 
 
 
