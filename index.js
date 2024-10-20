@@ -165,8 +165,24 @@ async function resolveUser(token) {
     // Check if the user information user ID
     if (response.data && response.data.sub) {
       console.log(response.data);
-      console.log(response.data.assigned_user_name);
-      return response.data.is_caregiver?[response.data.sub,response.data.is_caregiver,response.data.assigned_user,response.data.assigned_user_name]:[response.data.sub,response.data.is_caregiver]; 
+      let isCaregiver = response.data.is_caregiver === 'true' || response.data.is_caregiver === true;
+      const assignedUser = response.data.assigned_user || [];
+      const assignedUserName = response.data.assigned_user_name || [];
+
+      const assignedUserArray = Array.isArray(assignedUser) ? assignedUser : [assignedUser];
+      const assignedUserNameArray = Array.isArray(assignedUserName) ? assignedUserName : [assignedUserName];
+
+      const result = {
+        userId: response.data.sub,
+        isCaregiver: isCaregiver,
+        assignedUser: assignedUserArray,
+        assignedUserName: assignedUserNameArray
+      };
+
+      return result; 
+
+      // console.log(response.data.assigned_user_name);
+      // return response.data.is_caregiver?[response.data.sub,response.data.is_caregiver,response.data.assigned_user,response.data.assigned_user_name]:[response.data.sub,response.data.is_caregiver]; 
 
     } else {
       throw new Error('User information does not contain a valid user ID');
@@ -186,21 +202,31 @@ async function tokenVerification(req, res, next) {
   try {
     const tokenValid = await verifyToken(token);
     console.log(!tokenValid?"Token Is Valid":"Unauthorized");
+
     if (tokenValid !== 0) {
       res.status(401).json({ error: 'Token invalid or expired' });
       return;
     }
 
     const resolvedUser = await resolveUser(token);
-    if (resolvedUser[0] === -1) {
+    if (!resolvedUser) {
+    //if (resolvedUser[0] === -1) {
       res.status(401).json({ error: 'Token invalid or expired' });
       return;
     }
 
-    req.userId = resolvedUser[0];
-    req.isCaregiver = resolvedUser[1];
-    if(req.isCaregiver) req.assignedUser = resolvedUser[2];
-    if(req.isCaregiver) req.assignedUserName = resolvedUser[3];
+    //req.userId = resolvedUser[0];
+    req.userId = resolvedUser.userId;
+    req.isCaregiver = resolvedUser.isCaregiver;
+    //req.isCaregiver = resolvedUser[1];
+    if (req.isCaregiver) {
+      req.assignedUser = resolvedUser.assignedUser; 
+      req.assignedUserName = resolvedUser.assignedUserName;
+    }
+
+    // if(req.isCaregiver) req.assignedUser = resolvedUser[2];
+    // if(req.isCaregiver) req.assignedUserName = resolvedUser[3];
+
     console.log("req",req.userId,req.isCaregiver,req.assignedUser,req.assignedUserName);
     console.log("tokenver complete");
     // All checks passed, proceed to the next middleware or route handler
@@ -354,13 +380,23 @@ app.post('/assignCaregiver', async (req, res, next) => $thinkpink.verifyToken(re
 
     const userData = userResponse.data;
 
+    //Retrieve existing assigned users if there are any or create an array
+    const existingAssignedUsers = userData.attributes && userData.attributes.assigned_user
+      ? userData.attributes.assigned_user
+      : [];
+
+    const existingAssignedUserNames = userData.attributes && userData.attributes.assigned_user_name
+      ? userData.attributes.assigned_user_name
+      : [];
+
     userData.attributes = {
       ...userData.attributes, // keep existing attributes
-      is_caregiver: true,
-      assigned_user: assignedUser.id,
-      assigned_user_name: assignedUser.email,
+      is_caregiver: ['true'],
+      assigned_user: [...existingAssignedUsers, assignedUser.id],
+      assigned_user_name: [...existingAssignedUserNames, assignedUser.email],
     };
 
+    console.log(userData);
 
     const updateCaregiver = await axios.put(
       keycloakAdminUrl,
@@ -379,7 +415,8 @@ app.post('/assignCaregiver', async (req, res, next) => $thinkpink.verifyToken(re
       return res.status(updateCaregiver.status).json({ message: 'Failed to update caregiver assignment' });
     }
   } catch (error) {
-    console.error('Error assigning caregiver:', error.message || error);
+    console.error('Error assigning caregiver:', error.response?.data || error.message || error);
+    //console.error('Error assigning caregiver:', error.message || error);
     res.status(500).json({ message: 'Internal server error', error: error.message || error });
   }
 });
@@ -395,8 +432,9 @@ app.get('/getEvents', (req, res, next) => $thinkpink.verifyToken(req, res, next,
 	const collection = db.collection('events');
 
 	//const objectId = new ObjectId("65395ca09544dacb9c7372ab");
-  var eId=req.isCaregiver?req.assignedUser:req.userId;
-	 //var result = await collection.find({ userId: eId }).toArray();
+  //var eId=req.isCaregiver?req.selectedUserId:req.userId;
+	//var result = await collection.find({ userId: eId }).toArray();
+  const eId = req.query.userId;
 
    var result = await collection.find({ 
     userId: eId, 
@@ -411,7 +449,8 @@ app.post('/createEvent', (req, res, next) => $thinkpink.verifyToken(req, res, ne
     await client.connect();
     const db = client.db('thinkpink');
     const collection = db.collection('events');
-    var eId=req.isCaregiver?req.assignedUser:req.userId;
+    //var eId=req.isCaregiver?req.selectedUserId:req.userId;
+    const eId = req.body.userId;
     const eventData = {
         ...req.body,
         userId: eId
