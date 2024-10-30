@@ -243,8 +243,7 @@ $thinkpink.verifyToken = tokenVerification;
 
 app.put('/updateUserProfile', (req, res, next) => $thinkpink.verifyToken(req, res, next, ['thinkpink-api']), async (req, res) => {
   try {
-    //console.log('Request body:', req.body);
-    
+
     const { firstName, lastName, email, password} = req.body;
     const userId = req.userId; 
 
@@ -260,11 +259,6 @@ app.put('/updateUserProfile', (req, res, next) => $thinkpink.verifyToken(req, re
     );
 
     const adminToken = tokenResponse.data.access_token;
-
-    // const decodedToken = JSON.parse(Buffer.from(adminToken.split('.')[1], 'base64').toString());
-    // console.log('Decoded admin token:', decodedToken);
-
-
     console.log('Keycloak admin token obtained successfully',adminToken);
 
     const updateProfileResponse = await axios.put(
@@ -281,15 +275,10 @@ app.put('/updateUserProfile', (req, res, next) => $thinkpink.verifyToken(req, re
         },
       }
     );
-
     if (updateProfileResponse.status !== 204) { 
       return res.status(updateProfileResponse.status).json({ message: 'Failed to update profile in Keycloak' });
     }
-
-
     if (password) {
-      //console.log('Password:', password);
-
       try {
       const updatePasswordResponse = await axios.put(
         `${keycloakAdminUrl}/reset-password`, //endpoint for password change in Keycloak
@@ -305,7 +294,6 @@ app.put('/updateUserProfile', (req, res, next) => $thinkpink.verifyToken(req, re
           },
         }
       );
-
       if (updatePasswordResponse.status !== 204) {
           return res.status(updatePasswordResponse.status).json({ message: 'Failed to update password in Keycloak' });
         }
@@ -314,9 +302,7 @@ app.put('/updateUserProfile', (req, res, next) => $thinkpink.verifyToken(req, re
         return res.status(500).json({ message: 'Error updating password in Keycloak' });
       }
     }
-
     return res.status(200).json({ message: 'Profile updated successfully' });
-
   } catch (error) {
     console.error('Error updating profile in Keycloak:', error.response?.data || error.message);
     res.status(500).json({ message: 'Internal server error' });
@@ -389,7 +375,7 @@ app.post('/assignCaregiver', async (req, res, next) => $thinkpink.verifyToken(re
       ? userData.attributes.assigned_user_name
       : [];
 
-    userData.attributes = {
+    userData.attributes = { 
       ...userData.attributes, // keep existing attributes
       is_caregiver: ['true'],
       assigned_user: [...existingAssignedUsers, assignedUser.id],
@@ -497,10 +483,6 @@ app.get('/getEvents', (req, res, next) => $thinkpink.verifyToken(req, res, next,
 	await client.connect();
 	const db = client.db('thinkpink');
 	const collection = db.collection('events');
-
-	//const objectId = new ObjectId("65395ca09544dacb9c7372ab");
-  //var eId=req.isCaregiver?req.selectedUserId:req.userId;
-	//var result = await collection.find({ userId: eId }).toArray();
   const eId = req.query.userId;
 
    var result = await collection.find({ 
@@ -516,7 +498,6 @@ app.post('/createEvent', (req, res, next) => $thinkpink.verifyToken(req, res, ne
     await client.connect();
     const db = client.db('thinkpink');
     const collection = db.collection('events');
-    //var eId=req.isCaregiver?req.selectedUserId:req.userId;
     const eId = req.body.userId;
     const eventData = {
         ...req.body,
