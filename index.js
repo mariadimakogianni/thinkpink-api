@@ -55,7 +55,8 @@ const options = {
 };
 
 //define url of mongo
-const dbUrl = 'mongodb://localhost:27017/thinkpink';
+//const dbUrl = 'mongodb://localhost:27017/thinkpink';
+const dbUrl = process.env.MONGO_URI || 'mongodb://localhost:27017/thinkpink';
 
 
 //import mongo client
@@ -87,7 +88,8 @@ keycloak.logger = console;
 
 
 //initialize the connection
-const client = new MongoClient('mongodb://localhost:27017/thinkpink');
+//const client = new MongoClient('mongodb://localhost:27017/thinkpink');
+const client = new MongoClient(dbUrl);
 
 //Retrive Email for Project SHaring
 async function findUserIdByEmail(email) {
